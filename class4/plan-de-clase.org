@@ -1,0 +1,83 @@
+#+TITLE: Leyes de Amdahl y Gustafson-Barsis, Rendimiento y Medición de Rendimiento en Programas de OpenMP
+#+AUTHOR: Christian Asch
+
+* Introducción al rendimiento paralelo y la escalabilidad (15 minutos)
+
+** Speedup
+El speedup es una comparación relativa entre dos casos de ejecución.
+
+** Escalabilidad
+La escalabilidad se refiere a la forma en que los programas responden
+a distintos niveles de recursos.
+
+** Eficiencia
+Qué tan bien se usan los recursos para obtener el Speedup
+
+** Partes secuenciales y paralelas de los programas
+
+** Overhead paralelo
+
+* Ley de Amdahl (15 minutos)
+
+** Introducción a la ley de Amdahl
+
+*** Fórmula y derivación
+
+** Aplicabilidad de la ley de Amdahl
+
+** Ejemplo y graficación
+En este código graficamos la cantidad de procesadores contra el speedup obtenido para varios programas con distintos porcentajes de paralelismo.
+#+begin_src python :tangle no :python ./.venv/bin/python :results file link :exports both
+  import matplotlib.pyplot as plt
+  import numpy as np
+  def amdahl_speedup(p, n):
+      return 1.0 / (1 - p + p/n)
+
+  name = "./amdahl.png"
+  procs = np.arange(1, 100)
+  parallel_portions = np.arange(0, 1, 0.2)
+  plt.xlabel("Cantidad de procesadores")
+  plt.ylabel("Speedup")
+  for par in parallel_portions:
+      result = amdahl_speedup(par, procs)
+      plt.plot(procs, result, label=f"{par:.1}")
+  plt.legend()
+  plt.savefig(name)
+  return name
+#+end_src
+
+#+RESULTS:
+[[file:./amdahl.png]]
+
+
+* Ley de Gustafson (15 minutos) 
+
+** Introducción a la ley de Gustafson
+
+*** Fórmula y derivación
+
+** Visualización de la ley de Gustafson
+
+** Ejemplo y graficación
+
+* Descanso (15 minutos)
+
+* Métricas de rendimiento para programas de OpenMP (25 minutos)
+
+** Cómo medir el tiempo de programas de OpenMP?
+
+*** Medición del speedup y la eficiencia de un programa de OpenMP
+
+*** Speedup ideal vs real
+
+** Ejemplo (Multiplicación de matrices)
+
+** Práctica (10 minutos)
+
+* Análisis e interpretación de resultados (20 minutos)
+
+* Descanso (15 minutos)
+
+* Caso de estudio: Análisis de un programa de OpenMP (25 minutos)
+
+* Resumen y preguntas (15 minutos)
