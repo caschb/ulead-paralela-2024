@@ -1,9 +1,18 @@
-CC=gcc
+CC=gcc-14
+LINK_FLAGS=-fopenmp
 
-all: matmul_serial
+all: saxpy_serial saxpy_sm
 
-matmul_serial.o: matmul_serial.c
+saxpy_serial.o: saxpy_serial.c
 	${CC} -c $?
 
-matmul_serial: matmul_serial.o
-	${CC} $? -o $@
+saxpy_serial: saxpy_serial.o
+	${CC} ${LINK_FLAGS} -o $@ $?
+	rm $?
+
+saxpy_sm.o: saxpy_sm.c
+	${CC} -c $?
+
+saxpy_sm: saxpy_sm.o
+	${CC} ${LINK_FLAGS} -o $@ $?
+	rm $?

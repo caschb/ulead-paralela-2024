@@ -23,7 +23,7 @@ $$S_{n} = \frac{t_{1}}{t_{n}}$$
 
 $$t_{1} = t_{s} + t_{p} = 1$$
 
-$$t_{n} = t_{s} + \frac{t_{p}}{n} = 1 - t_{p} + \frac{t_{p}}{n} $$
+$$t_{n} = t_{s} + \frac{t_{p}}{n} = 1 - t_{p} + \frac{t_{p}}{n}$$
 
 $$S_{n} = \frac{1}{(1-t_{p})+\frac{t_{p}}{n}}$$
 
@@ -94,11 +94,98 @@ $$S_{n} = 1 + t_{p} \cdot (n - 1 )$$
 * Descanso (15 minutos)
 * Métricas de rendimiento para programas de OpenMP (25 minutos)
 
-** Cómo medir el tiempo de programas de OpenMP?
+* Cómo medir el tiempo de programas de OpenMP?
+Para realizar los siguientes ejemplos nos vamos a concentrar en la operación SAXPY, "Single precision A X plus Y". Esta operación es la siguiente:
 
-*** Medición del speedup y la eficiencia de un programa de OpenMP
+$$\boldsymbol{z}=a\:\boldsymbol{x} + \boldsymbol{y}$$
 
-*** Speedup ideal vs real
+** Makefile y programa
+
+Las primeras líneas del Makefile nos indican cuál es el compilador que utilizaremos, así como banderas necesarias para realizar la compilación. En este caso utilizamos ~-fopenmp~ para que el programa pueda encontrar las bibliotecas necesarias.
+
+#+begin_src makefile :tangle Makefile
+CC=gcc-14
+LINK_FLAGS=-fopenmp
+#+end_src
+Luego definimos los comandos de compilación. En este contexto, ~sm~ significa "shared memory".
+#+begin_src makefile :tangle Makefile
+all: saxpy_serial saxpy_sm
+
+saxpy_serial.o: saxpy_serial.c
+	${CC} -c $?
+
+saxpy_serial: saxpy_serial.o
+	${CC} ${LINK_FLAGS} -o $@ $?
+	rm $?
+
+saxpy_sm.o: saxpy_sm.c
+	${CC} -c $?
+
+saxpy_sm: saxpy_sm.o
+	${CC} ${LINK_FLAGS} -o $@ $?
+	rm $?
+#+end_src
+
+** Medición del speedup y la eficiencia de un programa de OpenMP
+
+#+begin_src c :tangle saxpy_serial.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <omp.h>
+#+end_src
+
+#+begin_src c :tangle saxpy_serial.c
+void saxpy(float a, float * x, float * y, float * z, int elements)
+{
+  for(int i = 0; i < elements; ++i)
+  {
+    z[i] = a * x[i] + y[i];
+  }
+}
+#+end_src
+
+#+begin_src c :tangle saxpy_serial.c
+int main()
+{
+  double start, end;
+  const int total_elements = 1000000;
+  float a, *x, *y, *z;
+  a = 10.f;
+#+end_src
+
+#+begin_src c :tangle saxpy_serial.c
+  start = omp_get_wtime();
+  x = malloc(sizeof(float) * total_elements);
+  y = malloc(sizeof(float) * total_elements);
+  z = malloc(sizeof(float) * total_elements);
+
+  for(int i = 0; i < total_elements; ++i)
+  {
+    x[i] = 1.f;
+    y[i] = 2.3f;
+  }
+  end = omp_get_wtime() - start;
+  printf("Init time: %f\n", end);
+  #+end_src
+  
+#+begin_src c :tangle saxpy_serial.c
+  start = omp_get_wtime();
+  saxpy(a, x, y, z, total_elements);
+  end = omp_get_wtime() - start;
+  printf("Execution time: %f\n", end);
+#+end_src
+
+#+begin_src c :tangle saxpy_serial.c
+  free(x);
+  free(y);
+  free(z);
+  return 0;
+}
+
+#+end_src
+
+** Speedup ideal vs real
 
 ** Ejemplo (Multiplicación de matrices)
 
