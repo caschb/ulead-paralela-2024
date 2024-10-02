@@ -1,7 +1,7 @@
 #+TITLE: Leyes de Amdahl y Gustafson-Barsis y Medición de Rendimiento en Programas de OpenMP
 #+AUTHOR: Christian Asch
 
-* Introducción al rendimiento paralelo y la escalabilidad (15 minutos)
+* Introducción al rendimiento paralelo y la escalabilidad 
 ** Speedup
 El speedup es una comparación relativa entre dos casos de ejecución.
 
@@ -16,7 +16,7 @@ Qué tan bien se usan los recursos para obtener el Speedup
 
 ** Overhead paralelo
 
-* Ley de Amdahl (15 minutos)
+* Ley de Amdahl
 ** Introducción a la ley de Amdahl
 *** Fórmula y derivación
 $$S_{n} = \frac{t_{1}}{t_{n}}$$
@@ -30,7 +30,6 @@ $$S_{n} = \frac{1}{(1-t_{p})+\frac{t_{p}}{n}}$$
 $$\lim_{n\to\infty} S_{n} = \frac{1}{1-t_{p}}$$
 
 ** Aplicabilidad de la ley de Amdahl
-
 ** Ejemplo y graficación
 En este código graficamos la cantidad de procesadores contra el speedup obtenido para varios programas con distintos porcentajes de paralelismo.
 #+begin_src python :tangle no :python ./.venv/bin/python :results file link :exports both
@@ -55,7 +54,7 @@ En este código graficamos la cantidad de procesadores contra el speedup obtenid
 #+RESULTS:
 [[file:./amdahl.png]]
 
-* Ley de Gustafson (15 minutos) 
+* Ley de Gustafson
 ** Introducción a la ley de Gustafson
 *** Fórmula y derivación
 
@@ -92,9 +91,12 @@ $$S_{n} = 1 + t_{p} \cdot (n - 1 )$$
 [[file:./gustafson.png]]
 
 * Descanso (15 minutos)
-* Métricas de rendimiento para programas de OpenMP (25 minutos)
-
 * Cómo medir el tiempo de programas de OpenMP?
+** Jerarquía de memoria
+- Concepto
+- L1d, L1i, L2, L3 Cache
+- Cache lines
+
 Para realizar los siguientes ejemplos nos vamos a concentrar en la operación SAXPY, "Single precision A X plus Y". Esta operación es la siguiente:
 
 $$\boldsymbol{z}=a\:\boldsymbol{x} + \boldsymbol{y}$$
@@ -105,60 +107,41 @@ Las primeras líneas del Makefile nos indican cuál es el compilador que utiliza
 
 #+begin_src makefile :tangle Makefile
 CC=gcc-14
-LINK_FLAGS=-fopenmp
+FLAGS=-fopenmp -O3
 #+end_src
 Luego definimos los comandos de compilación. En este contexto, ~sm~ significa "shared memory".
 #+begin_src makefile :tangle Makefile
 all: saxpy_serial saxpy_sm
 
-saxpy_serial.o: saxpy_serial.c
-	${CC} -c $?
+saxpy_serial: saxpy_serial.c
+	${CC} ${FLAGS} -o $@ $?
 
-saxpy_serial: saxpy_serial.o
-	${CC} ${LINK_FLAGS} -o $@ $?
-	rm $?
-
-saxpy_sm.o: saxpy_sm.c
-	${CC} -c $?
-
-saxpy_sm: saxpy_sm.o
-	${CC} ${LINK_FLAGS} -o $@ $?
-	rm $?
+saxpy_sm: saxpy_sm.c
+	${CC} ${FLAGS} -o $@ $?
 #+end_src
 
 ** Medición del speedup y la eficiencia de un programa de OpenMP
-
 #+begin_src c :tangle saxpy_serial.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <omp.h>
-#+end_src
-
-#+begin_src c :tangle saxpy_serial.c
-void saxpy(float a, float * x, float * y, float * z, int elements)
+void saxpy(float a, float * x, float * y, int elements)
 {
   for(int i = 0; i < elements; ++i)
   {
-    z[i] = a * x[i] + y[i];
+    y[i] = a * x[i] + y[i];
   }
 }
-#+end_src
-
-#+begin_src c :tangle saxpy_serial.c
-int main()
+int main(int argc, char ** argv)
 {
   double start, end;
-  const int total_elements = 1000000;
-  float a, *x, *y, *z;
+  int total_elements = atoi(argv[1]);
+  float a, *x, *y;
   a = 10.f;
-#+end_src
-
-#+begin_src c :tangle saxpy_serial.c
   start = omp_get_wtime();
   x = malloc(sizeof(float) * total_elements);
   y = malloc(sizeof(float) * total_elements);
-  z = malloc(sizeof(float) * total_elements);
 
   for(int i = 0; i < total_elements; ++i)
   {
@@ -167,31 +150,181 @@ int main()
   }
   end = omp_get_wtime() - start;
   printf("Init time: %f\n", end);
-  #+end_src
-  
-#+begin_src c :tangle saxpy_serial.c
   start = omp_get_wtime();
-  saxpy(a, x, y, z, total_elements);
+  saxpy(a, x, y, total_elements);
   end = omp_get_wtime() - start;
   printf("Execution time: %f\n", end);
-#+end_src
-
-#+begin_src c :tangle saxpy_serial.c
   free(x);
   free(y);
-  free(z);
+  return 0;
+}
+
+#+end_src
+#+begin_src c :tangle saxpy_sm.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <omp.h>
+void saxpy(float a, float * x, float * y, const int elements, const int chunk_size)
+{
+#pragma omp parallel for schedule(static, chunk_size) default(none) shared(a, x, y, chunk_size, elements)
+  for(int i = 0; i < elements; ++i)
+  {
+    y[i] = a * x[i] + y[i];
+  }
+}
+int main(int argc, char ** argv)
+{
+  double start, end;
+  int total_elements = atoi(argv[1]);
+  int chunk_size = atoi(argv[2]);
+  float a, *x, *y;
+  a = 10.f;
+  start = omp_get_wtime();
+  x = malloc(sizeof(float) * total_elements);
+  y = malloc(sizeof(float) * total_elements);
+
+#pragma omp parallel for schedule(static, chunk_size) default(none) shared(total_elements, x, y, chunk_size)
+  for(int i = 0; i < total_elements; ++i)
+  {
+    x[i] = 1.f;
+    y[i] = 2.3f;
+  }
+  end = omp_get_wtime() - start;
+  printf("Init time: %f\n", end);
+  start = omp_get_wtime();
+  saxpy(a, x, y, total_elements, chunk_size);
+  end = omp_get_wtime() - start;
+  printf("Execution time: %f\n", end);
+  free(x);
+  free(y);
   return 0;
 }
 
 #+end_src
 
-** Speedup ideal vs real
+** Posibles problemas de rendimiento
+- Overhead
+- False sharing
+** Strong scaling
+** Weak scaling 
+** Práctica con multiplicación de matrices
+#+begin_src makefile :tangle practice/Makefile
+CC=gcc-14
+FLAGS=-fopenmp -O3
+all: matmul_serial
 
-** Ejemplo (Multiplicación de matrices)
+matmul_serial: matmul_serial.c
+	${CC} ${FLAGS} -o $@ $?
 
-** Práctica (10 minutos)
+#+end_src
+#+begin_src c :tangle practice/matmul_serial.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-* Análisis e interpretación de resultados (20 minutos)
-* Descanso (15 minutos)
-* Caso de estudio: Análisis de un programa de OpenMP (25 minutos)
+typedef struct {
+  double * data;
+  int height;
+  int width;
+} Matrix;
+
+inline double get_element(const Matrix *mat, int i, int j);
+inline void set_element(Matrix *mat, int i, int j, double val);
+
+double get_element(const Matrix *mat, int i, int j)
+{
+  int index = mat->width * i + j;
+  return mat->data[index];
+}
+
+void set_element(Matrix *mat, int i, int j, double val)
+{
+  int index = mat->width * i + j;
+  mat->data[index] = val;
+}
+
+void free_matrix(Matrix *mat)
+{
+  free(mat->data);
+  mat->data = NULL;
+
+  free(mat);
+  mat = NULL;
+}
+
+Matrix * alloc_matrix(int height, int width)
+{
+  int total_elements = height * width;
+  Matrix *mat = malloc(sizeof(Matrix));
+  mat->height = height;
+  mat->width = width;
+  mat->data = malloc(sizeof(double) * total_elements);
+  return mat;
+}
+
+Matrix * create_n_matrix(int height, int width, int n)
+{
+  int total_elements = height * width;
+  Matrix *mat = alloc_matrix(height, width);
+  memset(mat->data, n, total_elements);
+  return mat;
+}
+
+Matrix * create_rand_matrix(int height, int width)
+{
+  int total_elements = height * width;
+  Matrix *mat = alloc_matrix(height, width);
+  
+  for(int i = 0; i < total_elements; ++i)
+  {
+    mat->data[i] = 1. + rand()/(RAND_MAX + 1.)/10;
+  }
+
+  return mat;
+}
+
+Matrix * matmul(const Matrix *matA, const Matrix *matB)
+{
+  Matrix * matC = create_n_matrix(matA->height, matB->width, 0);
+  for(int i = 0; i < matA->height; ++i)
+  {
+    for(int j = 0; j < matB->width; ++j)
+    {
+      double value = .0;
+      for(int k = 0; k < matA->width; ++k)
+      {
+        value += get_element(matA, i, k) * get_element(matB, k, j);
+      }
+      set_element(matC, i, j, value);
+    }
+  }
+  return matC;
+}
+
+void print_matrix(const Matrix * mat)
+{
+  for(int i = 0; i < mat->height; ++i)
+  {
+    for(int j = 0; j < mat->width; ++j)
+    {
+      printf("%f ", get_element(mat, i, j));
+    }
+    printf("\n");
+  }
+}
+
+int main()
+{
+  Matrix * matA = create_rand_matrix(3, 4);
+  Matrix * matB = create_rand_matrix(4, 1);
+  Matrix * matC = matmul(matA, matB);
+  print_matrix(matC);
+  free_matrix(matA);
+  free_matrix(matB);
+  free_matrix(matC);
+  return 0;
+}
+#+end_src
+
 * Resumen y preguntas (15 minutos)
