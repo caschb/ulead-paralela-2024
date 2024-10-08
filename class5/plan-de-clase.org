@@ -1,0 +1,41 @@
+#+TITLE: Programación paralela basada en tareas con OpenMP
+#+AUTHOR: Christian Asch
+
+* Introducción a la programación paralela basada en tareas
+
+** Qué es la programación paralela basada en tareas?
+La programación paralela que hemos aprendido funciona bien para problemas regulares, donde el trabajo a realizar y los patrones de acceso de memoria se pueden mapear fácilmente a índices de uno o varios ciclos.
+
+** Cuál es la diferencia con lo que venimos haciendo?
+
+** Tareas vs hilos
+
+** Casos de uso comunes
+
+* Programación paralela basada en tareas básica con OpenMP
+
+** Creación de tareas en OpenMP
+
+** Sincronización de tareas
+
+** Práctica
+
+* Dependencias entre tareas y sincronización
+
+** Dependencias
+
+** Calendarización
+
+** Ejemplo de código
+
+** Práctica
+
+* Capacidades avanzadas de tareas
+
+** Tareas anidadas y algoritmos recursivos
+
+** Taskgroups
+
+** Ejemplo
+
+** Práctica
