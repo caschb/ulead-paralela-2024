@@ -1,0 +1,62 @@
+#+TITLE: Tarea de introducción a OpenMP
+#+AUTHOR: Christian Asch Burgos
+#+DATE:
+#+OPTIONS: toc:nil
+#+LATEX_CLASS_OPTIONS: [a4paper,11pt]
+#+LATEX_HEADER: \usepackage[margin=0.8in]{geometry}
+
+* Escalamiento fuerte y débil
+
+1. Cree un arreglo de $N$ números enteros aleatorios.
+2. Paralelice el cáculo del promedio.
+3. Realice los siguientes experimentos: - Escalamiento fuerte: Mantenga el tamaño del problema $N$ constante y mida el tiempo de ejecución variando el número de hilos $T$ (por ejemplo, $T = 1, 2, 4, 8, 16$).
+   - Escalamiento débil: Aumente el tamaño del problema $N$ proporcionalmente al número de hilos $T$, manteniendo una cantidad de trabajo por hilo aproximadamente constante. Compare el tiempo de ejecución al variar $N$ y $T$.
+4. Grafique los resultados de escalamiento fuerte y débil y analice el comportamiento de su programa.
+
+Escoja un valor $N$ lo suficientemente grande para que el programa dure algunos segundos en ejecutar.
+
+* Método del trapecio
+
+Escriba un programa que calcule la integral de una función $f(x)$ en un intervalo $[a, b]$ utilizando el método del trapecio. Paralelice el cálculo utilizando OpenMP.
+1. Especifique la función a integrar, por ejemplo, f(x) = x^2.
+2. Utilice el método del trapecio con $N$ divisiones del intervalo para aproximar la integral. La fórmula básica del método del trapecio es:
+
+\[I \approx \frac{h}{2} \left( f(a) + 2 \sum_{i=1}^{N-1} f(x_i) + f(b) \right)\]
+
+donde $h = \frac{b-a}{N} y x_i = a + i \cdot h$.
+3. Paralelice el bucle que calcula la suma.
+4. Compare el rendimiento de la versión secuencial con la paralela para diferentes valores de N y diferentes números de hilos y realice gráficas.
+
+* Multiplicación de matrices
+Escriba un programa que multiplique dos matrices A y B de tamaño N \times N y almacene el resultado en una matriz C. La multiplicación de matrices debe paralelizarse con OpenMP.
+
+1. Inicialice las matrices A y B con valores aleatorios o predefinidos.
+2. Paralelice el cálculo de cada elemento de la matriz resultante C utilizando #pragma omp parallel for.
+3. Mida y compare el tiempo de ejecución de la versión secuencial con la paralela para diferentes tamaños de matriz N y diferentes números de hilos.
+
+* Corrección de errores
+
+El siguiente programa contiene un error:
+
+#+begin_src c :tangle error.c
+#include <stdio.h>
+#include <omp.h>
+
+int main() {
+    int contador = 0;
+    int N = 100000;
+    
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        contador++;
+    }
+
+    printf("Valor final del contador: %d\n", contador);
+    return 0;
+}
+#+end_src
+
+1. Cuál es el resultado esperado de este programa?
+2. Qué resultado se obtiene?
+3. Si los resultados son distintos, cuál es la razón?
+4. Modifique el programa de tal forma que da el resultado correcto
