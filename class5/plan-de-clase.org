@@ -1,41 +1,344 @@
 #+TITLE: Programación paralela basada en tareas con OpenMP
 #+AUTHOR: Christian Asch
+#+OPTIONS: toc:nil date:nil
+#+LANGUAGE: spanish
+#+LATEX_CLASS_OPTIONS: [a4paper,11pt]
+#+LATEX_HEADER: \usepackage[margin=0.8in]{geometry}
+#+LATEX_HEADER: \usepackage[spanish]{babel}
 
 * Introducción a la programación paralela basada en tareas
 
 ** Qué es la programación paralela basada en tareas?
-La programación paralela que hemos aprendido funciona bien para problemas regulares, donde el trabajo a realizar y los patrones de acceso de memoria se pueden mapear fácilmente a índices de uno o varios ciclos.
-
-** Cuál es la diferencia con lo que venimos haciendo?
+La programación paralela que hemos aprendido funciona bien para problemas regulares, donde el trabajo a realizar y los patrones de acceso de memoria se pueden mapear fácilmente a índices de uno o varios ciclos. Cuando los problemas son irregulares, las técnicas que hemos aprendido pueden llevar a desbalances de carga.
+Estos problemas irregulares incluyen por ejemplo operaciones con estructuras de datos dispersas o problemas con estructuras de control complejas.
 
 ** Tareas vs hilos
+Las tareas son un concepto más abstracto que los hilos. A nivel de implementación de OpenMP, las tareas se manejan con hilos sin embargo, al nivel de programación de aplicaciones, las tareas funcionan por sí mismas.
 
-** Casos de uso comunes
+** Problema motivador
+Imaginemos que tenemos datos guardados en una lista enlazada y debemos de aplicar una operación a cada elemento de la lista. No sabemos el tamaño de la lista y no sabemos cuánto dura cada operación. Dada esta situación no podemos fácilmente paralelizar el programa con lo que sabemos al momento. Una forma sería contar la cantidad de elementos en la lista, copiarlos a un arreglo y después utilizar un ~#pragma omp parallel for~, sin embargo esta no siempre es una opción práctica.
+
+#+begin_src C -n -r :tangle main.c
+#include <omp.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+typedef struct Node {
+  int data;
+  int result;
+  struct Node *next;
+} Node;
+
+int es_primo(int num)
+{
+  if(num <= 2)
+  {
+    return 1;
+  }
+  for(int i = 2; i < num; ++i)
+  {
+    if(num % i == 0)
+    {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+void procesar_lista(Node *node)
+{
+  if(node != NULL)
+  {
+    node->result = es_primo(node->data);
+    procesar_lista(node->next);
+  }
+}
+
+void imprimir_lista(Node *node)
+{
+  if(node != NULL)
+  {
+    printf("(%d,%d)\n", node->data, node->result);
+    imprimir_lista(node->next);
+  }
+  
+}
+
+void inicializar_lista(Node **node, int start, int finish)
+{
+  (*node) = malloc(sizeof(Node));
+  (*node)->data = start;
+  (*node)->result = 0;
+  if(finish != start)
+  {
+    inicializar_lista(&(*node)->next, start+1, finish);
+  }
+  else {
+    (*node)->next = NULL;
+  }
+}  
+
+void borrar_lista(Node **node)
+{
+  if(*node)
+  {
+    Node *next = (*node)->next;
+    (*node) = NULL;
+    borrar_lista(&next);
+  }
+}
+
+int main()
+{
+  Node * node = malloc(sizeof(Node));
+  int size = 100000;
+  int start = 10000000;
+  inicializar_lista(&node, start, start+size);
+  procesar_lista(node);
+  //imprimir_lista(node);
+  borrar_lista(&node);
+  return 0;
+}
+#+end_src
 
 * Programación paralela basada en tareas básica con OpenMP
 
 ** Creación de tareas en OpenMP
+El constructo ~task~ crea una tarea de OpenMP. Cada tarea es una unidad independiente de trabajo con dos componentes:
+- El código que va a ejecutar, incluyendo cualquier función que encuentre (la región de la tarea).
+- El ambiente de datos asociado.
 
-** Sincronización de tareas
+** El constructo ~task~
 
-** Práctica
+#+begin_src C
+#pragma omp task [cláusulas]
+#+end_src
 
-* Dependencias entre tareas y sincronización
+Cuando un hilo se encuentra a este constructo tiene dos opciones, puede empezar a ejecutarlo en ese mismo momento o podría deferir la ejecución a otro momento. Esta segunda posibilidad es lo que permite que las tareas sean ventajosas para el problema de desbalance de cargas.
 
-** Dependencias
+** Fibonacci
 
-** Calendarización
+La serie de Fibonacci se puede definir por la siguiente relación de recurrencia:
 
-** Ejemplo de código
+$F_{0} &=0,\ F_{1} &=1$
 
-** Práctica
+$F_{n} &= F_{n-1}\ + F_{n-2}$
 
-* Capacidades avanzadas de tareas
+Una versión serial del programa es la siguiente:
 
-** Tareas anidadas y algoritmos recursivos
+#+begin_src C -n :tangle fibo_serial.c
+#include <stdio.h>
 
-** Taskgroups
+unsigned int fib(unsigned int n)
+{
+  unsigned int x,y;
+  if (n < 2) return n;
+  x = fib(n-1);
+  y = fib(n-2);
+  return x + y;
+}
 
-** Ejemplo
+int main()
+{
+  unsigned int number = 30;
+  unsigned int result = fib(number);
+  printf("El número de Fibonacci %u es %u\n", number, result);
+  return 0;
+}
+#+end_src
+Esta no es la mejor forma de codificar este algoritmo, sin embargo es útil para explicar el tema.
 
-** Práctica
+Para paralelizar este programa utilizando tareas vemos que este programa genera un árbol binario de llamadas a funciones y que cada llamado depende de aquellos que están más abajo en el árbol.
+Podemos traducir cada llamado a función como una tarea.
+#+begin_src C -n :tangle fibo_tasks.c
+#include <stdio.h>
+
+unsigned int fib(unsigned int n)
+{
+  unsigned int x,y;
+  if (n < 2) return n;
+#pragma omp task shared(x)
+  x = fib(n-1);
+#pragma omp task shared(y)
+  y = fib(n-2);
+#pragma omp taskwait
+  return x + y;
+}
+
+int main()
+{
+  unsigned int number = 30;
+  unsigned int result = 0;
+#pragma omp parallel
+  {
+#pragma omp single
+    result = fib(number);
+  }
+  printf("El número de Fibonacci %u es %u\n", number, result);
+  return 0;
+}
+#+end_src
+
+Aquí podemos ver varios constructos nuevos:
+
+#+begin_src C
+#pragma omp taskwait
+#+end_src
+
+Este constructo le indica al hilo que espere a que sus tareas hijas terminen antes de continuar ejecutando. En este caso es necesario ya que necesitamos el valor de ~x~ y ~y~ para poder calcular su suma.
+
+#+begin_src C
+#pragma omp single
+#+end_src
+Este constructo hace que el bloque interno sólo sea ejecutado por un hilo, este hilo es el que crea las tareas y espera mientras los otros hilos las ejecutan.
+
+** Patrón de Divide and Conquer
+
+** Práctica:
+
+Utilice el patrón de Divide and Conquer para escribir un programa que calcule Pi con tareas.
+
+#+begin_src C :tangle pi_serial.c
+#include <stdio.h>
+#include <omp.h>
+
+int main()
+{
+  const int num_steps = 1024 * 1024 * 1024;
+  double x, pi, sum = 0.0;
+  double start_time, end_time;
+
+  double step = 1.0/(double) num_steps;
+  start_time = omp_get_wtime();
+
+  for(int i = 0; i < num_steps; ++i)
+  {
+    x = (i + .5) * step;
+    sum += 4./(1. + x * x);
+  }
+
+  pi = step * sum;
+  end_time = omp_get_wtime() - start_time;
+
+  printf("pi=%f, %d steps, %f seconds", pi, num_steps, end_time);
+  
+  return 0;
+}
+#+end_src
+
+#+begin_src C :tangle pi_tasks.c
+#include <stdio.h>
+#include <omp.h>
+
+#define MIN_BLK 1024 * 256
+
+int pi_component(int start, int finish, double step)
+{
+  double x, sum1, sum2, sum = 0.0;
+  if(finish - start < MIN_BLK)
+  {
+    for(int i = start; i < finish; ++i)
+      {
+        x = (i + .5) * step;
+        sum += 4./(1. + x * x);
+      }
+  }
+  else
+  {
+    int iblk = finish - start;
+    #pragma omp task shared(sum1) 
+    sum1 = pi_component(start, finish - iblk/2, step);
+    #pragma omp task shared(sum2) 
+    sum2 = pi_component(finish - iblk/2, finish, step);
+    #pragma omp taskwait
+    sum = sum1 + sum2;
+  }
+  return sum;
+}
+
+int main()
+{
+  const int num_steps = 1024 * 1024 * 512;
+  double step = 1./(double) num_steps;
+  
+  double start_time = omp_get_wtime();
+  double sum = 0.0;
+  #pragma omp parallel
+  {
+    #pragma omp single
+    sum = pi_component(0, num_steps, step);
+  }
+  double pi = step * sum;
+  double end_time = omp_get_wtime() - start_time;
+
+  printf("pi=%f, %d steps, %f seconds", pi, num_steps, end_time);
+}
+
+
+#+end_src
+
+* Resumen de OpenMP
+
+** Threads
+
+#+begin_src C
+#pragma omp parallel
+#+end_src
+
+Crea la región paralela. El número de hilos solicitados se puede controlar con la variable de entorno ~OMP_NUM_THREADS~ o con ~omp_set_num_threads()~, sin embargo el número de hilos que se asignan depende del runtime.
+
+** Worksharing
+
+#+begin_src C
+#pragma omp for
+#+end_src
+
+Distribuye los hilos de tal forma que cada uno trabaja en regiones del ciclo for. La distribución de trabajo se puede controlar con ~schedule~.
+
+#+begin_src C
+#pragma omp single
+#+end_src
+
+Hace que sólo un hilo ejecute el código mientras los otros hilos esperan. Es útil para regiones de código que sólo se pueden o deben de ejecutar por un sólo hilo.
+
+** Tareas
+
+#+begin_src C
+#pragma omp single
+#+end_src
+
+** Barreras
+
+#+begin_src C
+#pragma omp barrier
+#+end_src
+
+#+begin_src C
+#pragma omp critical
+#+end_src
+
+** Ambiente de datos
+
+#+begin_src C
+shared
+private
+firstprivate
+#+end_src
+
+** Reducciones
+
+#+begin_src C
+reduction(operador:variables)
+#+end_src
+
+** Variables de entorno y funciones del runtime
+
+#+begin_src C
+OMP_NUM_THREADS
+void omp_set_num_threads(int)
+int omp_get_num_threads()
+int omp_get_thread_num()
+double omp_get_wtime()
+#+end_src
+
+
