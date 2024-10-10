@@ -18,7 +18,7 @@ Las tareas son un concepto más abstracto que los hilos. A nivel de implementaci
 ** Problema motivador
 Imaginemos que tenemos datos guardados en una lista enlazada y debemos de aplicar una operación a cada elemento de la lista. No sabemos el tamaño de la lista y no sabemos cuánto dura cada operación. Dada esta situación no podemos fácilmente paralelizar el programa con lo que sabemos al momento. Una forma sería contar la cantidad de elementos en la lista, copiarlos a un arreglo y después utilizar un ~#pragma omp parallel for~, sin embargo esta no siempre es una opción práctica.
 
-#+begin_src C -n -r :tangle main.c
+#+begin_src C -n -r :tangle lista_serial.c
 #include <omp.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -94,8 +94,11 @@ int main()
   int size = 100000;
   int start = 10000000;
   inicializar_lista(&node, start, start+size);
+  double start_time = omp_get_wtime() - start_time;
   procesar_lista(node);
   //imprimir_lista(node);
+  double final_time = omp_get_wtime() - start_time;
+  printf("total time: %f\n", final_time);
   borrar_lista(&node);
   return 0;
 }
@@ -275,6 +278,99 @@ int main()
 }
 
 
+#+end_src
+
+#+begin_src C :tangle list_tasks.c
+#include <omp.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+typedef struct Node {
+  int data;
+  int result;
+  struct Node *next;
+} Node;
+
+int es_primo(int num)
+{
+  if(num <= 2)
+  {
+    return 1;
+  }
+  for(int i = 2; i < num; ++i)
+  {
+    if(num % i == 0)
+    {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+void procesar_lista(Node *node)
+{
+  Node *current_node = node;
+  while(current_node != NULL)
+  {
+#pragma omp task
+    {
+      current_node->result = es_primo(current_node->data);
+    }
+    current_node = current_node->next;
+  }
+}
+
+void imprimir_lista(Node *node)
+{
+  if(node != NULL)
+  {
+    printf("(%d,%d)\n", node->data, node->result);
+    imprimir_lista(node->next);
+  }
+  
+}
+
+void inicializar_lista(Node **node, int start, int finish)
+{
+  (*node) = malloc(sizeof(Node));
+  (*node)->data = start;
+  (*node)->result = -1;
+  if(finish != start)
+  {
+    inicializar_lista(&(*node)->next, start+1, finish);
+  }
+  else {
+    (*node)->next = NULL;
+  }
+}  
+
+void borrar_lista(Node **node)
+{
+  if(*node)
+  {
+    Node *next = (*node)->next;
+    (*node) = NULL;
+    borrar_lista(&next);
+  }
+}
+
+int main()
+{
+  Node * node = malloc(sizeof(Node));
+  int size = 100000;
+  int start = 10000000;
+  inicializar_lista(&node, start, start+size);
+  double start_time = omp_get_wtime();
+#pragma omp parallel
+  {
+    #pragma omp single
+    procesar_lista(node);
+  }
+  double final_time = omp_get_wtime() - start_time;
+  printf("total time: %f\n", final_time);
+  borrar_lista(&node);
+  return 0;
+}
 #+end_src
 
 * Resumen de OpenMP
