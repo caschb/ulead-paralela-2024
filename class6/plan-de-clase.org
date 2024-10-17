@@ -1,0 +1,200 @@
+#+TITLE: Programación paralela distribuida con MPI
+#+AUTHOR: Christian Asch
+#+OPTIONS: toc:nil date:nil
+#+LANGUAGE: spanish
+#+LATEX_CLASS_OPTIONS: [a4paper,11pt]
+#+LATEX_HEADER: \usepackage[margin=0.8in]{geometry}
+#+LATEX_HEADER: \usepackage[spanish]{babel}
+
+* Paso de mensajes
+
+El modelo de pase de mensajes consiste en un conjunto de procesos que sólo tienen memoria local pero se pueden comunicar con otros procesos envíando y recibiendo mensajes. Para poder realizar esta transferencia de datos entre la memoria local de un proceso a la memoria local de otro proceso es necesario que ambos procesos realicen operaciones.
+MPI es una adaptación particular de este modelo.
+
+* Introducción a MPI
+
+MPI es una especificación, por lo que existen múltiples implementaciones como OpenMPI (no confundir con OpenMP) y MPICH. La especificación se creó para C y FORTRAN, pero también existen bindings para otros lenguajes como C++ y Python.
+
+** Conceptos básicos
+Vamos a derivar una interfaz básica a partir del modelo de paso de mensajes y a partir de ahí se describirá el cómo MPI implementa estos conceptos.
+En el modelo los procesos que se ejecutan en paralelo tienen espacios de memoria exclusivos. Hay comunicación cuando una porción del espacio de direcciones de un proceso se copia a otro. Esta operación es cooperativa y ocurre cuando un proceso ejecuta una operación de /envíar/ y el otro ejecuta una operación de /recibir/. ¿Qué argumentos deberían de recibir estas operaciones?
+Para el emisor es necesario los datos a enviar y el proceso que recibirá los datos. Para describir los datos a enviar, la forma más sencilla es especificar la dirección en donde empieza el bloque y el tamaño del bloque. Por otra parte, para el receptor, es necesario la dirección y el tamaño de dónde se recibirán los datos, así como una variable que se llenará con la identificación del emisor. 
+Además de estos requerimientos mínimos, también es útil controlar cuáles mensajes se reciben y en qué momento, para esto, un proceso debe de poder filtrar mensajes a partir de una etiqueta que se envía con el mensaje. Finalmente, también es útil que el mensaje receptor pueda manejar una longitud máxima pero que también pueda recibir un mensaje con una longitud menor.
+Con estos requerimientos, nuestra interfaz mínima sería:
+
+#+begin_src
+enviar(dirección, longitud, destino, etiqueta)
+recibir(dirección, longitud, fuente, etiqueta, longitud recibida)
+#+end_src
+En el caso del receptor es común el poder utilizar comodines para la ~fuente~ y la ~etiqueta~ lo que permite recibir mensajes de cualquier proceso o etiqueta.
+
+Antes de MPI existían múltiples systemas que tenían interfaces similares a esta. Estos sistemas tenían múltiples restricciones que limitaban la expresividad de las bibliotecas. Los autores de MPI analizaron las restricciones y buscaron formas de relajarlas, manteniendo la misma semántica de antes. A continuación se analizan las restricciones y la forma en que se relajaron:
+
+*** Descripción de los buffers de mensajes:
+Describir los mensajes sólo con ~(dirección, longitud)~ tiene dos limitantes:
+- Muchas veces los datos no están contigüos en memoria, por ejemplo en el caso de una fila de una matriz que está guardada por columnas.
+- La representación binaria de los datos puede variar entre equipos de hardware, por ejemplo en el caso de que el emisor sea un sistema /big-endian/ y el receptor sea /little-endian/.
+
+  La forma en que MPI resuelve este problema es por medio de una descripción de más alto nivel de los datos. En vez de simplemente especificar la dirección y la longitud de los datos, MPI describe el buffer por medio de una tripleta ~(dirección, cantidad, tipo de dato)~. La ventaja de esto se vuelve aparente con el hecho de que los usuarios pueden crear sus propios tipos de datos, aunque estos no sean necesariamente contiguos.
+
+*** Separación de mensajes en familias
+El sistema de etiquetas para mensajes es necesario pero insuficiente, debido a que estas fuerzan al programa entero a utilizarlas de manera predefinida y coherente. Esto hace que el utilizar bibliotecas sea complicado debido a que estas podrían utlizar las mismas etiquetas de alguna otra diferente al programa principal. La solución que MPI da a este problema es con un nuevo concepto, el de el /contextos/. Estos contextos permiten separar mensajes del usuario de los de bibliotecas.
+
+*** Agrupamiento de procesadores
+En MPI los procesos pertenecen a grupos. Si un grupo tiene $n$ procesos entonces esos procesos están identificados por rangos que van del $0$ al $n - 1$.
+
+*** Comunicadores
+El concepto de grupo y contexto se combinan en un objeto llamado un /comunicador/. Este comunicador es un argumento en la mayoría de operaciones de MPI. Los argumentos de /destino/ o /fuente/ siempre son en referencia al rango del proceso dentro del comunicador.
+Con esto, las funciones básicas de envío y recepción de mensajes en MPI son:
+
+#+begin_src C
+MPI_Send(direccion, cantidad, tipo_de_dato, destino, etiqueta, comunicador)
+MPI_Recv(direccion, cantidad_max, tipo_de_dato, fuente, etiqueta, comunicador, estado)
+#+end_src
+Donde el argumento ~estado~ contiene información sobre el tamaño del mensaje recibido, la fuente y la etiqueta, lo que es útil cuando se utlizan comodines.
+
+** Otros conceptos de MPI
+
+*** Comunicaciones colectivas
+Son operaciones realizadas por todos los procesadores en un comunicador. Existen dos tipos:
+- Operaciones de movimiento de datos.
+- Operaciones de computación colectiva.
+
+*** Topologías virtuales
+Permiten acomodar los rangos de distintas formas para ajustarse a las aplicaciones de la mejor forma.
+
+** Ejemplos básicos
+
+*** Ping Pong
+
+#+begin_src C :tangle ping_pong.c
+#include <mpi.h>
+#include <stdio.h>
+#define MAX 1000
+
+int main(int argc, char **argv)
+{
+  MPI_Init(&argc, &argv);
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  MPI_Status status;
+  int i = 0;
+  while(i < MAX)
+  {
+    if(rank == 0)
+    {
+      printf("ping\n");
+      ++i;
+      MPI_Send(&i, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+      MPI_Recv(&i, 1, MPI_INT, 1, 0, MPI_COMM_WORLD, &status);
+    }
+    else
+    {
+      MPI_Recv(&i, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+      printf("pong\n");
+      ++i;
+      MPI_Send(&i, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    }
+  }
+  
+  MPI_Finalize();
+  return 0;
+}
+#+end_src
+
+#+begin_src python :tangle ping_pong.py
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+MAX = 1000
+i = 0
+while i < MAX:
+    if rank == 0:
+        print(f"ping, {i}")
+        i+=1
+        comm.send(i, dest = 1, tag=0)
+        i = comm.recv(source = 1, tag=0)
+    else:
+        i = comm.recv(source = 0, tag=0)
+        print(f"pong, {i}")
+        i+=1
+        comm.send(i, dest = 0, tag=0)
+#+end_src
+
+*** Ring
+#+begin_src C :tangle ring_communication.c
+#include <mpi.h>
+#include <stdio.h>
+#define MAX 1000
+
+int main(int argc, char **argv)
+{
+  MPI_Init(&argc, &argv);
+  int rank, comm_size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+  MPI_Status status;
+  int ring_variable = 0;
+  
+  while(ring_variable < MAX)
+  {
+    if(rank == 0)
+    {
+      ++ring_variable;
+      MPI_Send(&ring_variable, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
+      MPI_Recv(&ring_variable, 1, MPI_INT, comm_size-1, 0, MPI_COMM_WORLD, &status);
+    }
+    else if(rank == comm_size - 1)
+    {
+      MPI_Recv(&ring_variable, 1, MPI_INT, rank-1, 0, MPI_COMM_WORLD, &status);
+      ++ring_variable;
+      MPI_Send(&ring_variable, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    }
+    else if(rank % 2 == 0)
+    {
+      ++ring_variable;
+      MPI_Send(&ring_variable, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
+      MPI_Recv(&ring_variable, 1, MPI_INT, rank-1, 0, MPI_COMM_WORLD, &status);
+    }
+    else
+    {
+      MPI_Recv(&ring_variable, 1, MPI_INT, rank-1, 0, MPI_COMM_WORLD, &status);
+      ++ring_variable;
+      MPI_Send(&ring_variable, 1, MPI_INT, rank+1, 0, MPI_COMM_WORLD);
+    }
+  }
+  if(rank == 0)
+  {
+    printf("%d\n", ring_variable);
+  }
+  MPI_Finalize();
+}
+#+end_src
+#+begin_src python :tangle ring_communication.py
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+comm_size = comm.Get_size()
+rank = comm.Get_rank()
+MAX = 1000
+ring_variable = 0
+while ring_variable < MAX:
+    if rank == 0:
+        ring_variable += 1
+        comm.send(ring_variable, dest = rank + 1, tag=0)
+        ring_variable = comm.recv(source = comm_size - 1, tag=0)
+    elif rank == comm_size -1:
+        ring_variable = comm.recv(source = rank - 1, tag=0)
+        ring_variable += 1
+        comm.send(ring_variable, dest = 0, tag=0)
+    elif rank % 2 == 0:
+        ring_variable += 1
+        comm.send(ring_variable, dest = rank + 1, tag=0)
+        ring_variable = comm.recv(source = rank - 1, tag=0)
+    else:
+        ring_variable = comm.recv(source = rank - 1, tag=0)
+        ring_variable += 1
+        comm.send(ring_variable, dest = rank + 1, tag=0)
+if rank == 0:
+    print(ring_variable)
+#+end_src

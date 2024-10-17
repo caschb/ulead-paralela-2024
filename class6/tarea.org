@@ -1,0 +1,60 @@
+#+TITLE: Tarea 3
+#+AUTHOR: Christian Asch
+#+OPTIONS: toc:nil date:nil
+#+LANGUAGE: spanish
+#+LATEX_CLASS_OPTIONS: [a4paper,11pt]
+#+LATEX_HEADER: \usepackage[margin=0.8in]{geometry}
+#+LATEX_HEADER: \usepackage[spanish]{babel}
+
+* El dominio del hechicero
+
+Los experimentos de Pandelume el hechicero lo llevaron a crear un dominio en el que pueden haber árboles (~a~), desiertos (~d~), o lagos (~l~). Pandelume busca la distribución correcta de estos recursos de tal forma que ninguno prime sobre los demás. El dominio está dividido en parcelas rectangulares. Cada parcela tiene un recurso y está rodeada de otras 8, excepto aquellas que se encuentran en las esquinas o en los lados (ver ejemplo).
+
+Su trabajo es escribir un programa paralelo y distribuido que simule la evolución del dominio de Pandelume a partir de un estado inicial.
+La evolución de cada parcela se da con las siguientes reglas:
+- Si la parcela actual es un árbol y tiene 4 o más lagos adyacentes esta se inunda y se convierte en lago.
+- Si la parcela actual es un lago y tiene menos de 3 lagos adyacentes esta se seca y se convierte en desierto.
+- Si la parcela actual es un desierto y tiene 3 o más árboles adyacentes esta se poliniza y se convierte en árbol.
+- Si la parcela actual es un árbol y tiene más de 4 árboles adyacentes esta se queda sin recursos y se convierte en desierto.
+- En cualquier otro caso la parcela actual no cambia.
+
+Su programa debe de recibir el nombre de un archivo de texto con el siguiente formato:
+
+#+begin_src
+ 8
+ d d l a l d l a
+ l a l d a l a d
+ a d d l l l l a
+ d a l d d d a l
+ a l d a l a d d
+ l d a a l d l a
+ a a d a a a l a
+ l d l l a d d d
+
+#+end_src
+
+Donde la primer línea representa las dimensiones del dominio y las líneas siguientes representan el estado inicial de este.
+También debe de recibir un número que representa la cantidad de días que se simulará el dominio.
+
+** Puntos importantes
+
+- La salida de su programa debe de ser un archivo llamado ~final.txt~ que contenga el estado final del dominio y debe de imprimir en pantalla la cantidad de desiertos, lagos y árboles que hay.
+- Su programa debe de utilizar la biblioteca MPI y puede estar escrito en C o en Python.
+- Su programa no puede solicitar datos de forma interactiva. Tampoco puede tener los datos de entrada quemados en el código.
+- Si su programa está escrito en C debe de poder compilarse con ~mpicc~.
+- Sólo un proceso puede leer el archivo de entrada y tiene que dividir el dominio entre todos los procesos.
+- Su programa se tiene que poder ejecutar de una de las siguientes formas según corresponda:
+#+begin_src shell
+mpi -np <número de procesos> python <nombre del programa>.py\
+    <nombre del archivo>.txt <número de días>
+
+mpi -np <número de procesos> ./<nombre del programa>\
+    <nombre del archivo>.txt <número de días>
+#+end_src
+
+** Entregables
+Los entregables de la tarea son:
+- El código fuente del programa.
+- El script de slurm con el que ejecutó el programa en Kabré.
+- El archivo txt de entrada que utilizó.
+
